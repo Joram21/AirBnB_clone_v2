@@ -1,41 +1,88 @@
-th Facric , creates a tgz archive
-from web_static content folder
-"""
+# Configures a web server for deployment of web_static.
 
-from fabric.api import env, local, put, run
-from datetime import datetime
-from os.path import exists, isdir
-env.hosts = ['35.227.5.245', '3.236.14.41']
+# Nginx configuration file
+$nginx_conf = "server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    add_header X-Served-By ${hostname};
+    root   /var/www/html;
+    index  index.html index.htm;
+    location /hbnb_static {
+        alias /data/web_static/current;
+        index index.html index.htm;
+    }
+    location /redirect_me {
+        return 301 http://cuberule.com/;
+    }
+    error_page 404 /404.html;
+    location /404 {
+      root /var/www/html;
+      internal;
+    }
+}"
 
+package { 'nginx':
+  ensure   => 'present',
+  provider => 'apt'
+} ->
 
-def local_clean(number=0):
-    """Local Clean"""
-    fd_list = local('ls -1t versions', capture=True)
-    fd_list = fd_list.split('\n')
-    n = int(number)
-    if n in (0, 1):
-        n = 1
-    print(len(fd_list[n:]))
-    for i in fd_list[n:]:
-        local('rm versions/' + i)
+file { '/data':
+  ensure  => 'directory'
+} ->
 
+file { '/data/web_static':
+  ensure => 'directory'
+} ->
 
-def remote_clean(number=0):
-    """Remote Clean"""
-    fd_list = run('ls -1t /data/web_static/releases')
-    fd_list = fd_list.split('\r\n')
-    print(fd_list)
-    n = int(number)
-    if n in (0, 1):
-        n = 1
-    print(len(fd_list[n:]))
-    for i in fd_list[n:]:
-        if i is 'test':
-            continue
-        run('rm -rf /data/web_static/releases/' + i)
+file { '/data/web_static/releases':
+  ensure => 'directory'
+} ->
 
+file { '/data/web_static/releases/test':
+  ensure => 'directory'
+} ->
 
-def do_clean(number=0):
-    """Fabric script that deletes aout of dates archives"""
-    local_clean(number)
-    remote_clean(number)
+file { '/data/web_static/shared':
+ensure => 'directory'
+  } ->
+
+file { '/data/web_static/releases/test/index.html':
+  ensure  => 'present',
+  content => "Holberton School Puppet\n"
+} ->
+
+file { '/data/web_static/current':
+  ensure => 'link',
+  target => '/data/web_static/releases/test'
+} ->
+
+exec { 'chown -R ubuntu:ubuntu /data/':
+  path => '/usr/bin/:/usr/local/bin/:/bin/'
+}
+
+file { '/var/www':
+  ensure => 'directory'
+} ->
+
+file { '/var/www/html':
+  ensure => 'directory'
+} ->
+
+file { '/var/www/html/index.html':
+  ensure  => 'present',
+  content => "Holberton School Nginx\n"
+} ->
+
+file { '/var/www/html/404.html':
+  ensure  => 'present',
+  content => "Ceci n'est pas une page\n"
+} ->
+
+file { '/etc/nginx/sites-available/default':
+  ensure  => 'present',
+  content => $nginx_conf
+} ->
+
+exec { 'nginx restart':
+  path => '/etc/init.d/'
+} 
